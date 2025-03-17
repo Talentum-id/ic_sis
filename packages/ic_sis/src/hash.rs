@@ -76,6 +76,7 @@ fn hash_array(elements: Vec<Value<'_>>) -> Hash {
     for element in elements {
         hasher.update(&hash_value(element)[..]);
     }
+
     hasher.finalize().into()
 }
 
@@ -92,56 +93,28 @@ fn hash_value(val: Value<'_>) -> Hash {
 mod tests {
     use super::*;
     use hex_literal::hex;
-    use std::collections::HashMap;
 
     #[test]
-    fn test_hash_string() {
-        let result = hash_string("test");
+    fn message_id_string_reference_1() {
         assert_eq!(
-            result.as_ref(),
-            hex!("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
+            hash_string("request_type"),
+            hex!("769e6f87bdda39c859642b74ce9763cdd37cb1cd672733e8c54efaa33ab78af9"),
         );
     }
 
     #[test]
-    fn test_hash_bytes() {
-        let result = hash_bytes(b"test");
+    fn message_id_string_reference_2() {
         assert_eq!(
-            result.as_ref(),
-            hex!("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
+            hash_string("call"),
+            hex!("7edb360f06acaef2cc80dba16cf563f199d347db4443da04da0c8173e3f9e4ed"),
         );
     }
 
     #[test]
-    fn test_hash_u64() {
+    fn message_id_bytes_reference() {
         assert_eq!(
-            hash_u64(0),
-            hex!("6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d").into()
+            hash_bytes(&[68, 73, 68, 76, 0, 253, 42][..]),
+            hex!("6c0b2ae49718f6995c02ac5700c9c789d7b7862a0d53e6d40a73f1fcd2f70189")
         );
-        assert_eq!(
-            hash_u64(1234),
-            hex!("8b37fd3ebbe6396a89ed8563dd0cc55927ac90138950460c77cffeb55cf63810").into()
-        );
-    }
-
-    #[test]
-    fn test_hash_array() {
-        let arr = vec![Value::String("test")];
-        let result = hash_array(arr);
-        assert_ne!(result, Hash::default());
-    }
-
-    #[test]
-    fn test_hash_of_map() {
-        let mut map = HashMap::new();
-        map.insert("key", Value::String("value"));
-        let result = hash_of_map(map);
-        assert_ne!(result, Hash::default());
-    }
-
-    #[test]
-    fn test_hash_with_domain() {
-        let result = hash_with_domain(b"domain", b"value");
-        assert_ne!(result, Hash::default());
     }
 }

@@ -1,4 +1,5 @@
 #![doc = include_str!("../CHANGELOG.md")]
+pub mod delegation;
 pub mod sui;
 pub(crate) mod hash;
 pub(crate) mod init;

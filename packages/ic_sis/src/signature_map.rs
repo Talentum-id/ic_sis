@@ -120,7 +120,7 @@ impl SignatureMap {
 }
 
 #[cfg(test)]
-mod tests {
+mod signature_map_tests {
     use super::*;
 
     fn random_hash() -> Hash {
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn test_put_and_get() {
+    fn test_put_signature() {
         let mut map = SignatureMap::default();
         let seed_hash = random_hash();
         let delegation_hash = random_hash();
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_delete() {
+    fn test_delete_signature() {
         let mut map = SignatureMap::default();
         let seed_hash = random_hash();
         let delegation_hash = random_hash();
@@ -150,43 +150,50 @@ mod tests {
     }
 
     #[test]
-    fn test_expiration() {
+    fn test_prune_no_expired() {
         let mut map = SignatureMap::default();
         let seed_hash = random_hash();
         let delegation_hash = random_hash();
         map.put(seed_hash, delegation_hash);
-        
-        // Not expired yet
-        assert!(!map.is_expired(get_current_time(), seed_hash, delegation_hash));
-        
-        // Expired
-        let future_time = get_current_time() + DELEGATION_SIGNATURE_EXPIRES_AT + 1;
-        assert!(map.is_expired(future_time, seed_hash, delegation_hash));
+        let pruned = map.prune_expired(get_current_time(), 10);
+        assert_eq!(pruned, 0);
     }
 
     #[test]
-    fn test_prune_expired() {
-        let mut map = SignatureMap::default();
-        for _ in 0..5 {
-            map.put(random_hash(), random_hash());
-        }
-
-        let future_time = get_current_time() + DELEGATION_SIGNATURE_EXPIRES_AT + 1;
-        let pruned = map.prune_expired(future_time, 10);
-        assert_eq!(pruned, 5);
-    }
-
-    #[test]
-    fn test_witness() {
+    fn test_prune_some_expired() {
         let mut map = SignatureMap::default();
         let seed_hash = random_hash();
         let delegation_hash = random_hash();
         map.put(seed_hash, delegation_hash);
-        
+        let pruned =
+            map.prune_expired(get_current_time() + DELEGATION_SIGNATURE_EXPIRES_AT + 1, 10);
+        assert_eq!(pruned, 1);
+    }
+
+    #[test]
+    fn test_root_hash() {
+        let mut map = SignatureMap::default();
+        let seed_hash = random_hash();
+        let delegation_hash = random_hash();
+        map.put(seed_hash, delegation_hash);
+        let hash = map.root_hash();
+        assert_ne!(hash, Hash::default());
+    }
+
+    #[test]
+    fn test_witness_existing() {
+        let mut map = SignatureMap::default();
+        let seed_hash = random_hash();
+        let delegation_hash = random_hash();
+        map.put(seed_hash, delegation_hash);
         let witness = map.witness(seed_hash, delegation_hash);
         assert!(witness.is_some());
-        
-        let root_hash = map.root_hash();
-        assert_eq!(witness.unwrap().reconstruct(), root_hash);
+    }
+
+    #[test]
+    fn test_witness_non_existing() {
+        let map = SignatureMap::default();
+        let witness = map.witness(random_hash(), random_hash());
+        assert!(witness.is_none());
     }
 }

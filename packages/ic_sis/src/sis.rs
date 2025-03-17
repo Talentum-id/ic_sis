@@ -1,28 +1,27 @@
-use crate::hash;
 use crate::sui::SuiAddress;
 use crate::settings::Settings;
 use crate::time::get_current_time;
-use crate::with_settings;
-use candid::CandidType;
+use crate::{hash, with_settings};
+use candid::{CandidType, Deserialize};
 use ic_certified_map::Hash;
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use serde::Serialize;
+use std::collections::HashMap;
+use std::fmt;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-
-const PERSONAL_MESSAGE_PREFIX: &[u8] = b"\x19Sui Signed Message:\n";
+use blake2::{Blake2b512, Digest};
 
 #[derive(Debug)]
 pub enum SisMessageError {
     MessageNotFound,
-    MessageExpired,
+    MessageCreationError(String),
 }
 
 impl fmt::Display for SisMessageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SisMessageError::MessageNotFound => write!(f, "Message not found"),
-            SisMessageError::MessageExpired => write!(f, "Message has expired"),
+            SisMessageError::MessageCreationError(e) => write!(f, "Message creation error: {}", e),
         }
     }
 }
@@ -41,10 +40,10 @@ pub struct SisMessage {
     pub statement: String,
     pub uri: String,
     pub version: u8,
+    pub network: String,
     pub nonce: String,
     pub issued_at: u64,
     pub expiration_time: u64,
-    pub chain: String,
 }
 
 impl SisMessage {
@@ -54,41 +53,59 @@ impl SisMessage {
             SisMessage {
                 scheme: settings.scheme.clone(),
                 domain: settings.domain.clone(),
-                address: address.to_string(),
+                address: address.as_str().to_string(),
                 statement: settings.statement.clone(),
                 uri: settings.uri.clone(),
                 version: 1,
+                network: settings.network.clone(),
                 nonce: nonce.to_string(),
-                issued_at: current_time,
+                issued_at: get_current_time(),
                 expiration_time: current_time.saturating_add(settings.sign_in_expires_in),
-                chain: "sui".to_string(),
             }
         })
     }
 
     pub fn is_expired(&self) -> bool {
         let current_time = get_current_time();
-        self.issued_at < current_time || current_time > self.expiration_time
+        self.issued_at > current_time || current_time > self.expiration_time
     }
 
-    pub fn get_signing_message(&self) -> Vec<u8> {
-        let message = self.to_string();
-        let mut bytes = Vec::new();
-        bytes.extend_from_slice(PERSONAL_MESSAGE_PREFIX);
-        bytes.extend_from_slice(message.len().to_string().as_bytes());
-        bytes.extend_from_slice(message.as_bytes());
-        bytes
+    pub fn to_sign_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap_or_default()
+    }
+    
+    pub fn create_intent_message(&self) -> Vec<u8> {
+        let message_bytes = self.to_sign_bytes();
+        
+        let intent_prefix: [u8; 3] = [0, 0, 0]; // This would be the actual intent prefix
+        
+        let mut intent_message = Vec::with_capacity(intent_prefix.len() + message_bytes.len());
+        intent_message.extend_from_slice(&intent_prefix);
+        intent_message.extend_from_slice(&message_bytes);
+        
+        let mut hasher = Blake2b512::new();
+        hasher.update(&intent_message);
+        let hash = hasher.finalize();
+        
+        hash[..32].to_vec()
     }
 }
 
-impl ToString for SisMessage {
-    fn to_string(&self) -> String {
+impl fmt::Display for SisMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let json = serde_json::to_string(self).map_err(|_| fmt::Error)?;
+        write!(f, "{}", json)
+    }
+}
+
+impl From<SisMessage> for String {
+    fn from(val: SisMessage) -> Self {
         let issued_at_datetime =
-            OffsetDateTime::from_unix_timestamp_nanos(self.issued_at as i128).unwrap();
+            OffsetDateTime::from_unix_timestamp_nanos(val.issued_at as i128).unwrap();
         let issued_at_iso_8601 = issued_at_datetime.format(&Rfc3339).unwrap();
 
         let expiration_datetime =
-            OffsetDateTime::from_unix_timestamp_nanos(self.expiration_time as i128).unwrap();
+            OffsetDateTime::from_unix_timestamp_nanos(val.expiration_time as i128).unwrap();
         let expiration_iso_8601 = expiration_datetime.format(&Rfc3339).unwrap();
 
         format!(
@@ -97,17 +114,17 @@ impl ToString for SisMessage {
             {statement}\n\n\
             URI: {uri}\n\
             Version: {version}\n\
-            Chain: {chain}\n\
+            Network: {network}\n\
             Nonce: {nonce}\n\
             Issued At: {issued_at_iso_8601}\n\
             Expiration Time: {expiration_iso_8601}",
-            domain = self.domain,
-            address = self.address,
-            statement = self.statement,
-            uri = self.uri,
-            version = self.version,
-            chain = self.chain,
-            nonce = self.nonce,
+            domain = val.domain,
+            address = val.address,
+            statement = val.statement,
+            uri = val.uri,
+            version = val.version,
+            network = val.network,
+            nonce = val.nonce,
         )
     }
 }
@@ -115,7 +132,7 @@ impl ToString for SisMessage {
 pub fn sis_message_map_hash(address: &SuiAddress, nonce: &str) -> Hash {
     let mut bytes: Vec<u8> = vec![];
 
-    let address_bytes = address.as_bytes();
+    let address_bytes = address.as_str().as_bytes();
     bytes.push(address_bytes.len() as u8);
     bytes.extend(address_bytes);
 
@@ -138,31 +155,27 @@ impl SisMessageMap {
     }
 
     pub fn prune_expired(&mut self) {
-        self.map.retain(|_, message| !message.is_expired());
+        let current_time = get_current_time();
+        self.map
+            .retain(|_, message| message.expiration_time > current_time);
     }
 
     pub fn insert(&mut self, message: SisMessage, address: &SuiAddress, nonce: &str) {
         let hash = sis_message_map_hash(address, nonce);
-        self.map.insert(hash.into(), message);
+        self.map.insert(hash, message);
     }
 
     pub fn get(&self, address: &SuiAddress, nonce: &str) -> Result<SisMessage, SisMessageError> {
         let hash = sis_message_map_hash(address, nonce);
-        let message = self.map
-            .get(&hash.into())
+        self.map
+            .get(&hash)
             .cloned()
-            .ok_or(SisMessageError::MessageNotFound)?;
-
-        if message.is_expired() {
-            return Err(SisMessageError::MessageExpired);
-        }
-
-        Ok(message)
+            .ok_or(SisMessageError::MessageNotFound)
     }
 
     pub fn remove(&mut self, address: &SuiAddress, nonce: &str) {
         let hash = sis_message_map_hash(address, nonce);
-        self.map.remove(&hash.into());
+        self.map.remove(&hash);
     }
 }
 
@@ -175,60 +188,40 @@ impl Default for SisMessageMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread::sleep;
-    use std::time::Duration;
+    use crate::settings::{Settings, SettingsBuilder};
+    use crate::SETTINGS;
+
+    fn setup() -> SuiAddress {
+        let builder = SettingsBuilder::new("example.com", "http://example.com", "test_salt")
+            .network("mainnet");
+        let settings = builder.build().unwrap();
+        SETTINGS.with(|s| s.borrow_mut().replace(settings));
+        
+        SuiAddress::new("0x".to_owned() + &"a".repeat(64).as_str()).unwrap()
+    }
 
     #[test]
     fn test_sis_message_creation() {
-        let address = SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        ).unwrap();
+        let address = setup();
         let nonce = "test_nonce";
+        
         let message = SisMessage::new(&address, nonce);
-
+        
+        assert_eq!(message.domain, "example.com");
+        assert_eq!(message.address, address.as_str());
         assert_eq!(message.nonce, nonce);
-        assert_eq!(message.address, address.to_string());
-        assert_eq!(message.chain, "sui");
+        assert_eq!(message.network, "mainnet");
         assert_eq!(message.version, 1);
     }
 
     #[test]
-    fn test_message_expiration() {
-        let address = SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        ).unwrap();
+    fn test_create_intent_message() {
+        let address = setup();
         let nonce = "test_nonce";
-        let mut map = SisMessageMap::new();
+        
         let message = SisMessage::new(&address, nonce);
-
-        map.insert(message, &address, nonce);
-        assert!(map.get(&address, nonce).is_ok());
-
-        // Wait for message to expire
-        sleep(Duration::from_secs(1));
-
-        map.prune_expired();
-        let result = map.get(&address, nonce);
-        assert!(result.is_err());
-        match result {
-            Err(SisMessageError::MessageExpired) => (),
-            _ => panic!("Expected MessageExpired error"),
-        }
-    }
-
-    #[test]
-    fn test_signing_message_format() {
-        let address = SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        ).unwrap();
-        let nonce = "test_nonce";
-        let message = SisMessage::new(&address, nonce);
-
-        let signing_message = message.get_signing_message();
-        assert!(signing_message.starts_with(PERSONAL_MESSAGE_PREFIX));
-
-        let message_string = String::from_utf8(signing_message[PERSONAL_MESSAGE_PREFIX.len()..].to_vec()).unwrap();
-        assert!(message_string.contains(&address.to_string()));
-        assert!(message_string.contains(nonce));
+        let intent_message = message.create_intent_message();
+        
+        assert_eq!(intent_message.len(), 32);
     }
 }

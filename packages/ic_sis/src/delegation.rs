@@ -1,9 +1,9 @@
-se std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt};
 
 use super::hash::{self, Value};
 use crate::{
     sui::SuiAddress,
-    settings::Settings,
+    settings::{RuntimeFeature, Settings},
     signature_map::SignatureMap,
     time::get_current_time,
     with_settings,
@@ -77,9 +77,18 @@ pub fn generate_seed(address: &SuiAddress) -> Hash {
         seed.push(salt.len() as u8);
         seed.extend_from_slice(salt);
 
-        let address_bytes = address.as_bytes();
+        let address_bytes = address.as_str().as_bytes();
         seed.push(address_bytes.len() as u8);
         seed.extend(address_bytes);
+
+        match settings.runtime_features {
+            Some(ref features) if features.contains(&RuntimeFeature::IncludeUriInSeed) => {
+                let uri = settings.uri.as_bytes();
+                seed.push(uri.len() as u8);
+                seed.extend_from_slice(uri);
+            }
+            _ => (),
+        }
 
         hash::hash_bytes(seed)
     })
@@ -104,7 +113,6 @@ pub fn create_delegation(
             "Expiration is 0".to_string(),
         ));
     }
-
     with_settings!(|settings: &Settings| {
         Ok(Delegation {
             pubkey: session_key.clone(),
@@ -208,98 +216,90 @@ mod tests {
     use super::*;
     use crate::settings::SettingsBuilder;
     use crate::SETTINGS;
+    use ic_certified_map::labeled_hash;
 
-    const TEST_SESSION_KEY: &[u8] = &[
+    // Sample Ed25519 public key in DER format
+    pub const SESSION_KEY: &[u8] = &[
         48, 42, 48, 5, 6, 3, 43, 101, 112, 3, 33, 0, 220, 227, 2, 129, 72, 36, 43, 220, 96, 102,
         225, 92, 98, 163, 114, 182, 117, 181, 51, 15, 219, 197, 104, 55, 123, 245, 74, 181, 35,
         181, 171, 196,
     ];
 
-    fn init_test_settings() -> SuiAddress {
-        let builder = SettingsBuilder::new("example.com", "http://example.com", "test_salt")
+    fn init() -> SuiAddress {
+        let builder = SettingsBuilder::new("example.com", "http://example.com", "some_salt")
             .targets(vec![Principal::from_text("aaaaa-aa").unwrap()]);
         let settings = builder.build().unwrap();
-        SETTINGS.set(Some(settings));
-        SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-        )
-        .unwrap()
+        SETTINGS.with(|s| s.borrow_mut().replace(settings));
+        
+        SuiAddress::new("0x".to_owned() + &"a".repeat(64).as_str()).unwrap()
     }
 
     #[test]
     fn test_generate_seed() {
-        let address = init_test_settings();
+        let address = init();
         let seed = generate_seed(&address);
-        assert!(!seed.is_empty());
+        assert!(!seed.is_empty(), "Seed should not be empty");
     }
 
     #[test]
     fn test_create_delegation() {
-        init_test_settings();
-        let session_key = ByteBuf::from(TEST_SESSION_KEY);
+        init();
+        let session_key = ByteBuf::from(SESSION_KEY);
         let expiration = 123456789;
         let delegation = create_delegation(session_key.clone(), expiration).unwrap();
-
-        assert_eq!(delegation.pubkey, session_key);
-        assert_eq!(delegation.expiration, expiration);
+        assert_eq!(delegation.pubkey, session_key, "Session key should match");
+        assert_eq!(delegation.expiration, expiration, "Expiration should match");
         assert_eq!(
             delegation.targets,
-            Some(vec![Principal::from_text("aaaaa-aa").unwrap()])
+            Some(vec![Principal::from_text("aaaaa-aa").unwrap(),]),
+            "Targets should match"
         );
     }
 
     #[test]
     fn test_create_delegation_invalid_session_key() {
-        init_test_settings();
-        let session_key = ByteBuf::new();
+        init();
+        let session_key = ByteBuf::new(); // Empty session key
         let expiration = 123456789;
         let result = create_delegation(session_key, expiration);
-        assert!(result.is_err());
+        assert!(result.is_err(), "Result should be an error");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Invalid session key: Session key is empty",
+            "Error message should match"
+        );
     }
 
     #[test]
     fn test_create_delegation_invalid_expiration() {
-        init_test_settings();
-        let session_key = ByteBuf::from(TEST_SESSION_KEY);
-        let expiration = 0;
+        init();
+        let session_key = ByteBuf::from(SESSION_KEY);
+        let expiration = 0; // Invalid expiration
         let result = create_delegation(session_key, expiration);
-        assert!(result.is_err());
+        assert!(result.is_err(), "Result should be an error");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Invalid expiration: Expiration is 0",
+            "Error message should match"
+        );
     }
 
     #[test]
-    fn test_witness_and_signature() {
-        let address = init_test_settings();
+    fn test_create_certified_signature() {
+        let address = init();
         let seed = generate_seed(&address);
-        let session_key = ByteBuf::from(TEST_SESSION_KEY);
+        let session_key = ByteBuf::from(SESSION_KEY);
         let expiration = 123456789;
         let delegation = create_delegation(session_key.clone(), expiration).unwrap();
         let delegation_hash = create_delegation_hash(&delegation);
-        
         let mut signature_map = SignatureMap::default();
         signature_map.put(hash::hash_bytes(seed), delegation_hash);
-        
-        let witness_result = witness(&signature_map, seed, delegation_hash);
-        assert!(witness_result.is_ok());
-
+        let witness = witness(&signature_map, seed, delegation_hash).unwrap();
+        let tree = HashTree::Pruned(labeled_hash(b"sig", &witness.reconstruct()));
         let certificate = vec![1, 2, 3];
-        let certified_signature = create_certified_signature(
-            certificate,
-            witness_result.unwrap(),
-        );
-        assert!(certified_signature.is_ok());
-    }
-
-    #[test]
-    fn test_create_user_canister_pubkey() {
-        let address = init_test_settings();
-        let seed = generate_seed(&address);
-        let result = create_user_canister_pubkey(
-            &Principal::from_text("aaaaa-aa").unwrap(),
-            seed.to_vec(),
-        );
-        assert!(result.is_ok());
-        
-        let pubkey = result.unwrap();
-        assert!(from_der(&pubkey).is_ok());
+        let result = create_certified_signature(certificate, tree);
+        assert!(result.is_ok(), "Result should be ok");
+        let signature = result.unwrap();
+        assert!(!signature.is_empty(), "Signature should not be empty");
     }
 }

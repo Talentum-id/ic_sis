@@ -1,12 +1,15 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to the `ic_sis` library will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## 0.1.0 (2025-03-17)
 
-## [0.0.1] - 2025-02-07
+Initial release of the ic_sis library.
 
 ### Added
-
-- First release. `ic_siwe` v0.0.1 should be regarded as alpha software.
+- Core functionality for Sign-In with Sui (SIS) authentication
+- Integration with the Internet Computer architecture
+- Sui message and signature handling
+- Session management and delegation
+- Login flow implementation
+- Configuration settings for different Sui networks

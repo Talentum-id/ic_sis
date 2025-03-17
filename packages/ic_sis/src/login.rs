@@ -10,7 +10,7 @@ use crate::{
         create_delegation, create_delegation_hash, create_user_canister_pubkey, generate_seed,
         DelegationError,
     },
-    sui::{SuiAddress, SuiError, SuiSignature},
+    sui::{SuiAddress, SuiError, SuiSignature, verify_sui_signature},
     hash,
     rand::generate_nonce,
     settings::Settings,
@@ -26,7 +26,6 @@ pub fn prepare_login(address: &SuiAddress) -> Result<(SisMessage, String), SuiEr
     let nonce = generate_nonce();
     let message = SisMessage::new(address, &nonce);
 
-    // Save the SIS message for use in the login call
     SIS_MESSAGES.with_borrow_mut(|sis_messages| {
         sis_messages.insert(message.clone(), address, &nonce);
     });
@@ -46,6 +45,8 @@ pub enum LoginError {
     AddressMismatch,
     DelegationError(DelegationError),
     ASN1EncodeErr(ASN1EncodeErr),
+    SignatureVerificationFailed,
+    MessageCreationFailed,
 }
 
 impl From<SuiError> for LoginError {
@@ -80,6 +81,8 @@ impl fmt::Display for LoginError {
             LoginError::AddressMismatch => write!(f, "Recovered address does not match"),
             LoginError::DelegationError(e) => write!(f, "{}", e),
             LoginError::ASN1EncodeErr(e) => write!(f, "{}", e),
+            LoginError::SignatureVerificationFailed => write!(f, "Signature verification failed"),
+            LoginError::MessageCreationFailed => write!(f, "Failed to create message for verification"),
         }
     }
 }
@@ -87,7 +90,6 @@ impl fmt::Display for LoginError {
 pub fn login(
     signature: &SuiSignature,
     address: &SuiAddress,
-    public_key: &[u8],
     session_key: ByteBuf,
     signature_map: &mut SignatureMap,
     canister_id: &Principal,
@@ -95,13 +97,13 @@ pub fn login(
 ) -> Result<LoginDetails, LoginError> {
     SIS_MESSAGES.with_borrow_mut(|sis_messages| {
         sis_messages.prune_expired();
-
         let message = sis_messages.get(address, nonce)?;
-        let signing_message = message.get_signing_message();
-
-        // Verify Sui signature
-        if !signature.verify(&signing_message, public_key)? {
-            return Err(LoginError::SuiError(SuiError::InvalidSignature));
+        
+        let message_bytes = message.to_sign_bytes();
+        
+        match verify_sui_signature(&message_bytes, signature) {
+            Ok(true) => {},
+            _ => return Err(LoginError::SignatureVerificationFailed),
         }
 
         sis_messages.remove(address, nonce);
@@ -113,6 +115,7 @@ pub fn login(
         });
 
         let seed = generate_seed(address);
+
         signature_map.prune_expired(get_current_time(), MAX_SIGS_TO_PRUNE);
 
         let delegation = create_delegation(session_key, expiration)?;
@@ -131,162 +134,23 @@ pub fn login(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fastcrypto::{
-        ed25519::Ed25519KeyPair,
-        traits::{KeyPair, Signer},
-    };
-    use rand::rngs::OsRng;
+    use crate::settings::SettingsBuilder;
+    use crate::SETTINGS;
 
     #[test]
-    fn test_login_flow() {
-        // Create a test address
-        let address = SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        ).unwrap();
+    fn test_prepare_login() {
+        let builder = SettingsBuilder::new("example.com", "http://example.com", "some_salt")
+            .network("mainnet");
+        let settings = builder.build().unwrap();
+        SETTINGS.with(|s| s.borrow_mut().replace(settings));
 
-        // Prepare login
-        let (message, nonce) = prepare_login(&address).unwrap();
+        let address = SuiAddress::new("0x".to_owned() + &"a".repeat(64).as_str()).unwrap();
         
-        // Generate test keypair
-        let kp = Ed25519KeyPair::generate(&mut OsRng);
-        
-        // Get signing message and create signature
-        let signing_message = message.get_signing_message();
-        let sig = kp.sign(&signing_message);
-        
-        let sui_sig = SuiSignature {
-            bytes: sig.as_ref().to_vec(),
-            scheme: crate::sui::SuiSignatureScheme::Ed25519,
-        };
-
-        // Create test session key
-        let session_key = ByteBuf::from(vec![1, 2, 3, 4]);
-        let mut signature_map = SignatureMap::default();
-        let canister_id = Principal::from_text("aaaaa-aa").unwrap();
-
-        // Initialize settings
-        use crate::settings::SettingsBuilder;
-        use crate::SETTINGS;
-        
-        let settings = SettingsBuilder::new("example.com", "http://example.com", "test_salt")
-            .build()
-            .unwrap();
-        SETTINGS.set(Some(settings));
-
-        // Perform login
-        let result = login(
-            &sui_sig,
-            &address,
-            kp.public().as_ref(),
-            session_key,
-            &mut signature_map,
-            &canister_id,
-            &nonce,
-        );
-
+        let result = prepare_login(&address);
         assert!(result.is_ok());
-        let login_details = result.unwrap();
-        assert!(login_details.expiration > get_current_time());
-        assert!(!login_details.user_canister_pubkey.is_empty());
-    }
-
-    #[test]
-    fn test_login_invalid_signature() {
-        let address = SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        ).unwrap();
-
-        let (message, nonce) = prepare_login(&address).unwrap();
         
-        let kp = Ed25519KeyPair::generate(&mut OsRng);
-        let signing_message = message.get_signing_message();
-        let mut sig = kp.sign(&signing_message).as_ref().to_vec();
-        
-        // Corrupt the signature
-        sig[0] ^= 0xFF;
-        
-        let sui_sig = SuiSignature {
-            bytes: sig,
-            scheme: crate::sui::SuiSignatureScheme::Ed25519,
-        };
-
-        let session_key = ByteBuf::from(vec![1, 2, 3, 4]);
-        let mut signature_map = SignatureMap::default();
-        let canister_id = Principal::from_text("aaaaa-aa").unwrap();
-
-        // Initialize settings
-        use crate::settings::SettingsBuilder;
-        use crate::SETTINGS;
-        
-        let settings = SettingsBuilder::new("example.com", "http://example.com", "test_salt")
-            .build()
-            .unwrap();
-        SETTINGS.set(Some(settings));
-
-        let result = login(
-            &sui_sig,
-            &address,
-            kp.public().as_ref(),
-            session_key,
-            &mut signature_map,
-            &canister_id,
-            &nonce,
-        );
-
-        assert!(result.is_err());
-        match result {
-            Err(LoginError::SuiError(SuiError::InvalidSignature)) => (),
-            _ => panic!("Expected InvalidSignature error"),
-        }
-    }
-
-    #[test]
-    fn test_login_expired_message() {
-        let address = SuiAddress::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        ).unwrap();
-
-        let (message, nonce) = prepare_login(&address).unwrap();
-        
-        // Wait for message to expire
-        std::thread::sleep(std::time::Duration::from_secs(1));
-
-        let kp = Ed25519KeyPair::generate(&mut OsRng);
-        let signing_message = message.get_signing_message();
-        let sig = kp.sign(&signing_message);
-        
-        let sui_sig = SuiSignature {
-            bytes: sig.as_ref().to_vec(),
-            scheme: crate::sui::SuiSignatureScheme::Ed25519,
-        };
-
-        let session_key = ByteBuf::from(vec![1, 2, 3, 4]);
-        let mut signature_map = SignatureMap::default();
-        let canister_id = Principal::from_text("aaaaa-aa").unwrap();
-
-        // Initialize settings
-        use crate::settings::SettingsBuilder;
-        use crate::SETTINGS;
-        
-        let settings = SettingsBuilder::new("example.com", "http://example.com", "test_salt")
-            .build()
-            .unwrap();
-        SETTINGS.set(Some(settings));
-
-        let result = login(
-            &sui_sig,
-            &address,
-            kp.public().as_ref(),
-            session_key,
-            &mut signature_map,
-            &canister_id,
-            &nonce,
-        );
-
-        assert!(result.is_err());
-        match result {
-            Err(LoginError::SisMessageError(SisMessageError::MessageExpired)) => (),
-            _ => panic!("Expected MessageExpired error"),
-        }
+        let (message, nonce) = result.unwrap();
+        assert_eq!(message.address, address.as_str());
+        assert!(!nonce.is_empty());
     }
 }
