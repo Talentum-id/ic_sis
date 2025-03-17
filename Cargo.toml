@@ -2,4 +2,4 @@
 members = [
     "packages/ic_sis"
 ]
-resolver = "2
+resolver = "2"
