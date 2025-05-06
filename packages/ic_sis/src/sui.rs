@@ -1,8 +1,8 @@
 use std::fmt;
-use blake2::{Blake2b512, Digest};
+use blake2::{Blake2b, Digest};
 use ed25519_dalek::{PublicKey, Signature, Verifier};
 use k256::ecdsa::{signature::Verifier as K256Verifier, Signature as K256Signature, VerifyingKey};
-use p256::ecdsa::{signature::Verifier as P256Verifier, Signature as P256Signature, VerifyingKey as P256VerifyingKey};
+use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 
 pub const SUI_SIGNATURE_SCHEME_FLAG_ED25519: u8 = 0x00;
 pub const SUI_SIGNATURE_SCHEME_FLAG_SECP256K1: u8 = 0x01;
@@ -59,7 +59,6 @@ pub struct SuiAddress(String);
 
 impl SuiAddress {
     pub fn new(address: &str) -> Result<SuiAddress, SuiError> {
-        // Sui addresses start with 0x and are 64 characters (32 bytes) in length
         if !address.starts_with("0x") || address.len() != 66 {
             return Err(SuiError::AddressFormatError(String::from(
                 "Must start with '0x' and be 66 characters long",
@@ -182,7 +181,7 @@ pub fn create_intent_hash(message: &[u8]) -> Result<Vec<u8>, SuiError> {
     intent_message.extend_from_slice(&INTENT_PREFIX_TRANSACTION);
     intent_message.extend_from_slice(message);
 
-    let mut hasher = Blake2b512::new();
+    let mut hasher = Blake2b::new();
     hasher.update(&intent_message);
     let hash = hasher.finalize();
 
@@ -213,7 +212,7 @@ pub fn verify_sui_signature(
             let verifying_key = VerifyingKey::from_sec1_bytes(signature.public_key())
                 .map_err(|e| SuiError::InvalidPublicKey(e.to_string()))?;
             
-            let sig = K256Signature::from_bytes(signature.signature())
+            let sig = K256Signature::from_bytes(signature.signature().into())
                 .map_err(|e| SuiError::InvalidSignature(e.to_string()))?;
             
             verifying_key
@@ -226,7 +225,7 @@ pub fn verify_sui_signature(
             let verifying_key = P256VerifyingKey::from_sec1_bytes(signature.public_key())
                 .map_err(|e| SuiError::InvalidPublicKey(e.to_string()))?;
             
-            let sig = P256Signature::from_bytes(signature.signature())
+            let sig = P256Signature::from_bytes(signature.signature().into())
                 .map_err(|e| SuiError::InvalidSignature(e.to_string()))?;
             
             verifying_key
@@ -240,6 +239,7 @@ pub fn verify_sui_signature(
 }
 
 pub fn derive_sui_address_from_public_key(scheme: u8, public_key: &[u8]) -> Result<String, SuiError> {
+    // Validate scheme
     match scheme {
         SUI_SIGNATURE_SCHEME_FLAG_ED25519 => {
             if public_key.len() != 32 {
@@ -260,11 +260,13 @@ pub fn derive_sui_address_from_public_key(scheme: u8, public_key: &[u8]) -> Resu
         _ => return Err(SuiError::UnsupportedSignatureScheme(scheme)),
     }
 
-    let mut hasher = Blake2b512::new();
-    hasher.update(&[scheme]); // Prepend scheme identifier
+    // Derive address using Blake2b
+    let mut hasher = Blake2b::new();
+    hasher.update([scheme]); // Prepend scheme identifier
     hasher.update(public_key);
     let hash = hasher.finalize();
 
+    // Take first 32 bytes for the address
     let address_bytes = &hash[..32];
     Ok(format!("0x{}", hex::encode(address_bytes)))
 }
@@ -275,14 +277,17 @@ mod tests {
     
     #[test]
     fn test_sui_address_creation() {
+        // Valid Sui address
         let valid_address = "0x".to_owned() + &"a".repeat(64);
         let address = SuiAddress::new(&valid_address);
         assert!(address.is_ok());
         
+        // Invalid prefix
         let invalid_prefix = "1x".to_owned() + &"a".repeat(64);
         let address = SuiAddress::new(&invalid_prefix);
         assert!(address.is_err());
         
+        // Invalid length
         let invalid_length = "0x".to_owned() + &"a".repeat(63);
         let address = SuiAddress::new(&invalid_length);
         assert!(address.is_err());

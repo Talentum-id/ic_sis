@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fmt;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use blake2::{Blake2b512, Digest};
+use blake2::{Blake2b, Digest};
 
 #[derive(Debug)]
 pub enum SisMessageError {
@@ -83,7 +83,7 @@ impl SisMessage {
         intent_message.extend_from_slice(&intent_prefix);
         intent_message.extend_from_slice(&message_bytes);
         
-        let mut hasher = Blake2b512::new();
+        let mut hasher = Blake2b::new();
         hasher.update(&intent_message);
         let hash = hasher.finalize();
         
@@ -188,7 +188,7 @@ impl Default for SisMessageMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::{Settings, SettingsBuilder};
+    use crate::settings::SettingsBuilder;
     use crate::SETTINGS;
 
     fn setup() -> SuiAddress {
@@ -196,8 +196,10 @@ mod tests {
             .network("mainnet");
         let settings = builder.build().unwrap();
         SETTINGS.with(|s| s.borrow_mut().replace(settings));
+
+        let address = "0x".to_owned() + &"a".repeat(64).as_str();
         
-        SuiAddress::new("0x".to_owned() + &"a".repeat(64).as_str()).unwrap()
+        SuiAddress::new(&address).unwrap()
     }
 
     #[test]
@@ -221,7 +223,7 @@ mod tests {
         
         let message = SisMessage::new(&address, nonce);
         let intent_message = message.create_intent_message();
-        
+
         assert_eq!(intent_message.len(), 32);
     }
 }

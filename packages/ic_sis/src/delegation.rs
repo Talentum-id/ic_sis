@@ -230,8 +230,9 @@ mod tests {
             .targets(vec![Principal::from_text("aaaaa-aa").unwrap()]);
         let settings = builder.build().unwrap();
         SETTINGS.with(|s| s.borrow_mut().replace(settings));
+        let address = "0x".to_owned() + &"a".repeat(64).as_str();
         
-        SuiAddress::new("0x".to_owned() + &"a".repeat(64).as_str()).unwrap()
+        SuiAddress::new(&address).unwrap()
     }
 
     #[test]

@@ -143,8 +143,9 @@ mod tests {
             .network("mainnet");
         let settings = builder.build().unwrap();
         SETTINGS.with(|s| s.borrow_mut().replace(settings));
+        let sui_address = "0x".to_owned() + &"a".repeat(64).as_str();
 
-        let address = SuiAddress::new("0x".to_owned() + &"a".repeat(64).as_str()).unwrap();
+        let address = SuiAddress::new(&sui_address).unwrap();
         
         let result = prepare_login(&address);
         assert!(result.is_ok());
