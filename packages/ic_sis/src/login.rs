@@ -100,10 +100,14 @@ pub fn login(
         let message = sis_messages.get(address, nonce)?;
         
         let message_bytes = message.to_sign_bytes();
-        
+
         match verify_sui_signature(&message_bytes, signature) {
-            Ok(true) => {},
-            _ => return Err(LoginError::SignatureVerificationFailed),
+            Ok(derived_address) => {
+                if derived_address != address.as_str() {
+                    return Err(LoginError::AddressMismatch);
+                }
+            },
+            Err(e) => return Err(LoginError::SuiError(e)),
         }
 
         sis_messages.remove(address, nonce);
@@ -129,6 +133,31 @@ pub fn login(
             user_canister_pubkey: ByteBuf::from(user_canister_pubkey),
         })
     })
+}
+
+pub fn prune_all(signature_map: &mut SignatureMap) -> (usize, usize) {
+    let current_time = get_current_time();
+    let signatures_pruned = signature_map.prune_expired(current_time, usize::MAX);
+    let mut messages_count = 0;
+
+    SIS_MESSAGES.with_borrow_mut(|sis_messages| {
+        messages_count = sis_messages.count();
+        sis_messages.prune_expired();
+    });
+    
+    (signatures_pruned, messages_count)
+}
+
+pub fn clear_all(signature_map: &mut SignatureMap) -> (usize, usize) {
+    let signatures_count = signature_map.clear();
+    
+    let mut messages_count = 0;
+    SIS_MESSAGES.with_borrow_mut(|sis_messages| {
+        messages_count = sis_messages.count();
+        sis_messages.clear();
+    });
+    
+    (signatures_count, messages_count)
 }
 
 #[cfg(test)]

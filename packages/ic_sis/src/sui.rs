@@ -191,7 +191,7 @@ pub fn create_intent_hash(message: &[u8]) -> Result<Vec<u8>, SuiError> {
 pub fn verify_sui_signature(
     message: &[u8],
     signature: &SuiSignature,
-) -> Result<bool, SuiError> {
+) -> Result<String, SuiError> {
     let intent_hash = create_intent_hash(message)?;
     
     match signature.scheme() {
@@ -206,7 +206,7 @@ pub fn verify_sui_signature(
                 .verify(&intent_hash, &sig)
                 .map_err(|e| SuiError::InvalidSignature(e.to_string()))?;
             
-            Ok(true)
+            derive_sui_address_from_public_key(SUI_SIGNATURE_SCHEME_FLAG_ED25519, signature.public_key())
         }
         SUI_SIGNATURE_SCHEME_FLAG_SECP256K1 => {
             let verifying_key = VerifyingKey::from_sec1_bytes(signature.public_key())
@@ -219,7 +219,7 @@ pub fn verify_sui_signature(
                 .verify(&intent_hash, &sig)
                 .map_err(|e| SuiError::InvalidSignature(e.to_string()))?;
             
-            Ok(true)
+            derive_sui_address_from_public_key(SUI_SIGNATURE_SCHEME_FLAG_SECP256K1, signature.public_key())
         }
         SUI_SIGNATURE_SCHEME_FLAG_SECP256R1 => {
             let verifying_key = P256VerifyingKey::from_sec1_bytes(signature.public_key())
@@ -232,7 +232,7 @@ pub fn verify_sui_signature(
                 .verify(&intent_hash, &sig)
                 .map_err(|e| SuiError::InvalidSignature(e.to_string()))?;
             
-            Ok(true)
+            derive_sui_address_from_public_key(SUI_SIGNATURE_SCHEME_FLAG_SECP256R1, signature.public_key())
         }
         _ => Err(SuiError::UnsupportedSignatureScheme(signature.scheme())),
     }

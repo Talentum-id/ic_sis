@@ -177,6 +177,16 @@ impl SisMessageMap {
         let hash = sis_message_map_hash(address, nonce);
         self.map.remove(&hash);
     }
+
+    pub fn count(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn clear(&mut self) -> usize {
+        let count = self.map.len();
+        self.map.clear();
+        count
+    }
 }
 
 impl Default for SisMessageMap {

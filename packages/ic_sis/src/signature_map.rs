@@ -63,6 +63,13 @@ impl SignatureMap {
         });
     }
 
+    pub fn clear(&mut self) -> usize {
+        let count = self.expiration_queue.len();
+        self.certified_map = RbTree::new();
+        self.expiration_queue.clear();
+        count
+    }
+
     pub fn delete(&mut self, seed_hash: Hash, delegation_hash: Hash) {
         let mut is_empty = false;
         self.certified_map.modify(&seed_hash[..], |m| {
