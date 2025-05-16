@@ -1,5 +1,10 @@
 {
     "canisters": {
+      "ic_sis_provider": {
+        "candid": "packages/ic_sis_provider/ic_sis_provider.did",
+        "package": "ic_sis_provider",
+        "type": "rust"
+      }
     },
     "output_env_file": ".env",
     "version": 1

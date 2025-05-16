@@ -1,0 +1,64 @@
+type SisMessage = record {
+  scheme : text;
+  domain : text;
+  address : text;
+  statement : text;
+  uri : text;
+  version : nat8;
+  network : text;
+  nonce : text;
+  issued_at : nat64;
+  expiration_time : nat64;
+};
+
+type Delegation = record {
+  pubkey : blob;
+  expiration : nat64;
+  targets : opt vec principal;
+};
+
+type SignedDelegation = record {
+  delegation : Delegation;
+  signature : blob;
+};
+
+type LoginDetails = record {
+  expiration : nat64;
+  user_canister_pubkey : blob;
+};
+
+type PrepareLoginOkResponse = record {
+  sis_message : text;
+  nonce : text;
+};
+
+type RuntimeFeature = variant {
+  IncludeUriInSeed;
+  DisableSuiToPrincipalMapping;
+  DisablePrincipalToSuiMapping;
+};
+
+type SettingsInput = record {
+  domain : text;
+  uri : text;
+  salt : text;
+  network : opt text;
+  scheme : opt text;
+  statement : opt text;
+  sign_in_expires_in : opt nat64;
+  session_expires_in : opt nat64;
+  targets : opt vec text;
+  runtime_features : opt vec RuntimeFeature;
+};
+
+service : (SettingsInput) -> {
+  // Core authentication methods
+  "sis_prepare_login" : (address : text) -> (variant { Ok : PrepareLoginOkResponse; Err : text; });
+  "sis_login" : (signature : text, address : text, session_key : blob, nonce : text) -> (variant { Ok : LoginDetails; Err : text; });
+  "sis_get_delegation" : (address : text, session_key : blob, expiration : nat64) -> (variant { Ok : SignedDelegation; Err : text; }) query;
+  
+  // Principal/Address mappings
+  "get_principal" : (address : text) -> (variant { Ok : blob; Err : text; }) query;
+  "get_address" : (principal : blob) -> (variant { Ok : text; Err : text; }) query;
+  "get_caller_address" : () -> (variant { Ok : text; Err : text; }) query;
+}

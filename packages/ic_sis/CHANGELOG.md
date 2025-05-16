@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to the `ic_sis` library will be documented in this file.
+
+## 0.1.2 (2025-05-16)
+
+### Changed
+- Added `bytes_to_sui_address` to src/sui.rs
+
+
 ## 0.1.1 (2025-05-13)
 
 ### Changed

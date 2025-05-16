@@ -188,6 +188,10 @@ pub fn create_intent_hash(message: &[u8]) -> Result<Vec<u8>, SuiError> {
     Ok(hash[..32].to_vec())
 }
 
+pub fn bytes_to_sui_address(bytes: &[u8; 32]) -> String {
+    format!("0x{}", hex::encode(bytes))
+}
+
 pub fn verify_sui_signature(
     message: &[u8],
     signature: &SuiSignature,

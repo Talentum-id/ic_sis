@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "packages/ic_sis"
+    "packages/ic_sis",
+    "packages/ic_sis_provider"
 ]
 resolver = "2"
