@@ -4,7 +4,7 @@ all: build
 
 build:
 	dfx canister create ic_sis_provider
-	cargo build --target wasm32-unknown-unknown --release --package ic_sis_provider
+	cargo build --target wasm32-unknown-unknown --release
 	ic-wasm target/wasm32-unknown-unknown/release/ic_sis_provider.wasm -o target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm shrink
 	gzip -fk target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm
 	mv target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm.gz ic_sis_provider.wasm.gz
@@ -15,7 +15,9 @@ deploy: build
 upgrade: build
 	dfx canister install ic_sis_provider --wasm-module target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm --argument '(record { domain = "example.com"; uri = "https://example.com"; salt = "test-salt"; network = opt "mainnet"; scheme = null; statement = null; sign_in_expires_in = null; session_expires_in = null; targets = null; runtime_features = null; })' --mode upgrade
 
-test:
+test: build
+	export IC_SIS_PROVIDER_PATH="target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm" && \
+	export POCKET_IC_BIN="./pocket-ic" && \
 	cargo test
 
 fmt:
