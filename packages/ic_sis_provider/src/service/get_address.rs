@@ -6,7 +6,7 @@ use serde_bytes::ByteBuf;
 use crate::{PRINCIPAL_ADDRESS, SETTINGS};
 
 #[query]
-pub(crate) fn get_address(principal: ByteBuf) -> Result<String, String> {
+pub(crate) fn get_address(principal_bytes: ByteBuf) -> Result<String, String> {
     SETTINGS.with_borrow(|s| {
         if s.disable_principal_to_sui_mapping {
             return Err("Principal to Sui address mapping is disabled".to_string());
@@ -14,7 +14,7 @@ pub(crate) fn get_address(principal: ByteBuf) -> Result<String, String> {
         Ok(())
     })?;
 
-    let principal: Blob<29> = principal
+    let principal: Blob<29> = principal_bytes
         .as_ref()
         .try_into()
         .map_err(|_| "Failed to convert ByteBuf to Blob<29>")?;

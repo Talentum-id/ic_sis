@@ -1,27 +1,21 @@
-.PHONY: all build clean deploy test fmt
-
-all: build
-
 build:
-	dfx canister create ic_sis_provider
-	cargo build --target wasm32-unknown-unknown --release
-	ic-wasm ../../target/wasm32-unknown-unknown/release/ic_sis_provider.wasm -o ../../target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm shrink
-	gzip -fk ../../target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm
-	mv ../../target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm.gz ic_sis_provider.wasm.gz
+	cd ../../; \
+	dfx canister create --all; \
+	dfx build ic_sis_provider; \
+	cd target/wasm32-unknown-unknown/release/; \
+	ic-wasm ic_sis_provider.wasm -o ic_sis_provider.wasm metadata candid:service -f ../../../packages/ic_sis_provider/ic_sis_provider.did -v public; \
+	gzip --no-name --force "ic_sis_provider.wasm"; \
+	cp ic_sis_provider.wasm.gz ../../../packages/ic_sis_provider/; \
 
-deploy: build
-	dfx canister install ic_sis_provider --wasm-module target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm --argument '(record { domain = "example.com"; uri = "https://example.com"; salt = "test-salt"; network = opt "mainnet"; scheme = null; statement = null; sign_in_expires_in = null; session_expires_in = null; targets = null; runtime_features = null; })'
-
-upgrade: build
-	dfx canister install ic_sis_provider --wasm-module target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm --argument '(record { domain = "example.com"; uri = "https://example.com"; salt = "test-salt"; network = opt "mainnet"; scheme = null; statement = null; sign_in_expires_in = null; session_expires_in = null; targets = null; runtime_features = null; })' --mode upgrade
-
-test: build
-	export IC_SIS_PROVIDER_PATH="target/wasm32-unknown-unknown/release/ic_sis_provider-opt.wasm" && \
-	export POCKET_IC_BIN="./pocket-ic" && \
-	cargo test
-
-fmt:
-	cargo fmt --all
+test:
+	@{ \
+	  make -f ../test_canister/Makefile build; \
+		export POCKET_IC_BIN=../../pocket-ic; \
+		export IC_SIS_PROVIDER_PATH=../../target/wasm32-unknown-unknown/release/ic_si_provider.wasm.gz; \
+		export TEST_CANISTER_PATH=../../target/wasm32-unknown-unknown/release/test_canister.wasm.gz; \
+		$(MAKE) build; \
+		cargo test --test integration_tests -- --nocapture; \
+	}
 
 clean:
 	cargo clean

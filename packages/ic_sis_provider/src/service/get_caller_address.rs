@@ -1,4 +1,3 @@
-
 use ic_cdk::query;
 use serde_bytes::ByteBuf;
 
