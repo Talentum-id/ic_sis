@@ -66,8 +66,7 @@ Add the `ic_sis_provider` canister to your `dfx.json`:
     "ic_sis_provider": {
       "type": "custom",
       "candid": "https://github.com/Talentum-id/ic_sis/releases/latest/download/ic_sis_provider.did",
-      "wasm": "https://github.com/Talentum-id/ic_sis/releases/latest/download/ic_sis_provider.wasm.gz",
-      "init_args": "(record { domain = \"yourdomain.com\"; uri = \"https://yourdomain.com\"; salt = \"your-secure-salt\"; network = opt \"mainnet\"; targets = null; sign_in_expires_in = null; session_expires_in = null; runtime_features = null })"
+      "wasm": "https://github.com/Talentum-id/ic_sis/releases/latest/download/ic_sis_provider.wasm.gz"
     }
   }
 }

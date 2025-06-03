@@ -23,9 +23,8 @@ To add this canister to your Internet Computer project, update your `dfx.json` f
   "canisters": {
     "ic_sis_provider": {
       "type": "custom",
-      "candid": "https://github.com/yourusername/ic-sis-provider/releases/latest/download/ic_sis_provider.did",
-      "wasm": "https://github.com/yourusername/ic-sis-provider/releases/latest/download/ic_sis_provider.wasm.gz",
-      "init_args": "(record { domain = \"yourdomain.com\"; uri = \"https://yourdomain.com\"; salt = \"your-secure-salt\"; network = opt \"mainnet\"; targets = null; sign_in_expires_in = null; session_expires_in = null; runtime_features = null })"
+      "candid": "https://github.com/Talentum-id/ic_sis/releases/latest/download/ic_sis_provider.did",
+      "wasm": "https://github.com/Talentum-id/ic_sis/releases/latest/download/ic_sis_provider.wasm.gz"
     }
   }
 }
@@ -38,7 +37,20 @@ To add this canister to your Internet Computer project, update your `dfx.json` f
 The canister needs to be initialized with configuration parameters:
 
 ```
-dfx deploy ic_sis_provider --argument '(record { domain = "yourdomain.com"; uri = "https://yourdomain.com"; salt = "your-secure-salt"; network = opt "mainnet"; targets = null; sign_in_expires_in = null; session_expires_in = null; runtime_features = null })'
+dfx deploy ic_sis_provider --argument '(record { 
+  domain = "127.0.0.1"; 
+  uri = "http://127.0.0.1:4943"; 
+  salt = "app-dev-salt"; 
+  network = opt "devnet"; 
+  scheme = opt "http";
+  statement = opt "Login to the app";
+  sign_in_expires_in = opt 300000000000;
+  session_expires_in = opt 604800000000000;
+  targets = opt vec {
+      "'$(dfx canister id ic_sis_provider)'";
+      "'$(dfx canister id my_app_canister)'";
+  }; 
+})'
 ```
 
 ### Authentication Flow
@@ -113,7 +125,20 @@ make upgrade
 dfx start --background
 
 # Deploy with development settings
-dfx deploy ic_sis_provider --argument '(record { domain = "localhost:8000"; uri = "http://localhost:8000"; salt = "dev-salt"; network = opt "devnet"; targets = null; sign_in_expires_in = null; session_expires_in = null; runtime_features = null })'
+dfx deploy ic_sis_provider --argument '(record { 
+  domain = "127.0.0.1"; 
+  uri = "http://127.0.0.1:4943"; 
+  salt = "app-dev-salt"; 
+  network = opt "devnet"; 
+  scheme = opt "http";
+  statement = opt "Login to the app";
+  sign_in_expires_in = opt 300000000000;
+  session_expires_in = opt 604800000000000;
+  targets = opt vec {
+      "'$(dfx canister id ic_sis_provider)'";
+      "'$(dfx canister id my_app_canister)'";
+  }; 
+})'
 
 # Run tests
 make test
