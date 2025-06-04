@@ -2,6 +2,11 @@
 
 All notable changes to the `ic_sis` library will be documented in this file.
 
+## 0.1.3 (2025-06-04)
+
+### Changed
+- Fix `sis_login` with signature of ZKlogin
+
 ## 0.1.2 (2025-05-16)
 
 ### Changed

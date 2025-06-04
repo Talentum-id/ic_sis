@@ -135,7 +135,23 @@ impl SuiSignature {
                     public_key,
                 })
             }
-            SUI_SIGNATURE_SCHEME_FLAG_MULTISIG | SUI_SIGNATURE_SCHEME_FLAG_ZKLOGIN | SUI_SIGNATURE_SCHEME_FLAG_PASSKEY => {
+            SUI_SIGNATURE_SCHEME_FLAG_ZKLOGIN => {
+                if signature_bytes.len() < 2 {
+                    return Err(SuiError::SignatureFormatError(
+                        "zkLogin signature too short".to_string()
+                    ));
+                }
+                
+                let signature = signature_bytes[1..].to_vec();
+                let public_key = vec![];
+                
+                Ok(SuiSignature {
+                    scheme,
+                    signature,
+                    public_key,
+                })
+            }
+            SUI_SIGNATURE_SCHEME_FLAG_MULTISIG | SUI_SIGNATURE_SCHEME_FLAG_PASSKEY => {
                 Err(SuiError::UnsupportedSignatureScheme(scheme))
             }
             _ => Err(SuiError::InvalidSignatureScheme),
