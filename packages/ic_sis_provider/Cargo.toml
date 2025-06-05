@@ -1,11 +1,13 @@
 [package]
 name = "ic_sis_provider"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "Using the pre built ic_sis_provider canister is the easiest way to integrate Sui wallet authentication into an Internet Computer (ICP) application."
 license = "MIT"
 homepage = "https://github.com/Talentum-id/ic_sis"
 repository = "https://github.com/Talentum-id/ic_sis"
+authors = ["Talentum Team"]
+rust-version = "1.73"
 
 [lib]
 crate-type = ["cdylib"]
@@ -14,7 +16,7 @@ crate-type = ["cdylib"]
 candid = "0.10.9"
 ic-cdk = "0.15.1"
 ic-cdk-macros = "0.18.1"
-ic_sis = "0.1.3"
+ic_sis = "0.2.0"
 ic-certified-map = "0.4.0"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_bytes = "0.11.15"

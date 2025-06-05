@@ -84,11 +84,10 @@ pub fn init(ic: &PocketIc, targets: Option<Vec<Principal>>) -> (Principal, Optio
     let (canister_id, wasm_module) = create_canister(ic);
     let settings = valid_settings(canister_id, targets.clone());
     let arg = encode_one(settings).unwrap();
-    let sender = None;
 
-    ic.install_canister(canister_id, wasm_module, arg.clone(), sender);
+    ic.install_canister(canister_id, wasm_module, arg.clone(), None);
 
-    for _ in 0..5 {
+    for _ in 0..10 {
         ic.tick();
     }
 
@@ -129,10 +128,10 @@ pub fn create_mock_sui_wallet() -> (String, String) {
     let address = format!("0x{}", hex::encode(address_bytes));
     
     let mut signature_bytes = vec![0x00]; // Ed25519 scheme flag
-    let mut sig_data = [0u8; 64];
+    let mut sig_data = [0u8; 64]; // 64-byte signature
     rand::thread_rng().fill(&mut sig_data);
     signature_bytes.extend_from_slice(&sig_data);
-    let mut pub_key = [0u8; 32];
+    let mut pub_key = [0u8; 32]; // 32-byte Ed25519 public key
     rand::thread_rng().fill(&mut pub_key);
     signature_bytes.extend_from_slice(&pub_key);
     

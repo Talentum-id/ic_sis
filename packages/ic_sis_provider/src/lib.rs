@@ -46,7 +46,6 @@ thread_local! {
         disable_principal_to_sui_mapping: false,
     }) };
 
-    // For Sui, addresses are 32 bytes (instead of Ethereum's 20 bytes)
     static PRINCIPAL_ADDRESS: RefCell<StableBTreeMap<Blob<29>, [u8;32], VirtualMemory<DefaultMemoryImpl>>> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
