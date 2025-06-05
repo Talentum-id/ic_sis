@@ -47,10 +47,11 @@ Each signature includes a scheme flag, the signature bytes, and the public key b
 
 ## Login flow
 
-Creating a delegate identity using `ic_sis` is a three-step process that consists of the following steps:
-1. Prepare login
-2. Login
-3. Get delegation
+Creating a delegate identity using `ic_sis` is a three-step process:
+
+1. **Prepare login** - Generate SIS message and nonce
+2. **Login** - Verify signature and create session  
+3. **Get delegation** - Retrieve delegation for authenticated session
 
 An implementing canister is free to implement these steps in any way it sees fit. It is recommended though that implementing canisters follow the login flow described below and implement the SIS canister interface.
 
@@ -120,37 +121,168 @@ The login flow is illustrated in the following diagram:
 
 ### SIS canister interface
 
-The SIS canister interface consists of three main methods:
+#### `sis_prepare_login`
 
-### `sis_prepare_login`
+Initiates the login flow by creating a SIS message:
 
-- The `sis_prepare_login` method is called by the frontend application to initiate the login flow. The method takes the user's Sui address as a parameter and returns a SIS message together with a nonce. The frontend application uses the SIS message to prompt the user to sign the message with their Sui wallet.
-- See: [`login::prepare_login`](src/login.rs)
+```rust
+pub fn prepare_login(address: &SuiAddress) -> Result
+```
 
-### `sis_login`
+- **Input**: User's Sui address
+- **Output**: SIS message (for signing) + nonce
+- **Purpose**: Frontend uses this to prompt wallet signature
 
-- The `sis_login` method is called by the frontend application after the user has signed the SIS message. The method takes the user's Sui address, signature, session identity and nonce as parameters. The method verifies the signature using Sui's intent verification process and prepares the delegation to be fetched in the next step, the `sis_get_delegation` function.
-- See: [`login::login`](src/login.rs)
+#### `sis_login`
 
-### `sis_get_delegation`
+Verifies the signed message and creates a session:
 
-- The `sis_get_delegation` method is called by the frontend application after a successful login. The method takes the delegation expiration time as a parameter and returns a delegation.
-- The `sis_get_delegation` method is not mirrored by one function in the `ic_sis` library. The creation of delegate identities requires setting the certified data of the canister. This should not be done by the library, but by the implementing canister.
-- Creating a delegate identity involves interacting with the following `ic_sis` functions: [`delegation::generate_seed`](src/delegation.rs),[`delegation::create_delegation`](src/delegation.rs), [`delegation::create_delegation_hash`](src/delegation.rs), [`delegation::witness`](src/delegation.rs), [`delegation::create_certified_signature`](src/delegation.rs).
+```rust
+pub fn login(
+    signature: &SuiSignature,
+    address: &SuiAddress, 
+    session_key: ByteBuf,
+    signature_map: &mut SignatureMap,
+    canister_id: &Principal,
+    nonce: &str,
+) -> Result
+```
 
-## Updates
+- **Input**: Signature, address, session key, nonce
+- **Output**: Session details with expiration and public key
+- **Purpose**: Validates signature using Sui's intent verification
+
+#### `sis_get_delegation`
+
+Retrieves the delegation for authenticated access:
+
+- **Implementation**: Uses `generate_seed`, `create_delegation`, `witness`, etc.
+- **Purpose**: Creates ICP delegation for canister calls
+
+## 📚 API Reference
+
+### Core Functions
+
+```rust
+// Signature verification with BCS and intent signing
+pub fn verify_sui_signature(
+    blake2b_hash: &[u8],
+    signature: &SuiSignature,
+) -> Result;
+
+// Intent hash creation for authentication
+pub fn create_auth_intent_hash(message: &[u8]) -> Result<Vec, SuiError>;
+
+// Address derivation from public key
+pub fn derive_sui_address_from_public_key(
+    scheme: u8, 
+    public_key: &[u8]
+) -> Result;
+```
+
+### Message Creation
+
+```rust
+// Create SIS message with BCS serialization
+let message = SisMessage::new(&address, &nonce);
+
+// Get BCS bytes for signing
+let bcs_bytes = message.to_sign_bytes();
+
+// Create intent hash for verification
+let intent_hash = message.create_intent_message();
+```
+
+## 💡 Examples
+
+### Basic Usage
+
+```rust
+use ic_sis::{
+    settings::SettingsBuilder,
+    sui::{SuiAddress, SuiSignature},
+    login::{prepare_login, login},
+    init,
+};
+
+// Initialize library
+let settings = SettingsBuilder::new(
+    "myapp.com",
+    "https://myapp.com", 
+    "unique_salt"
+).network("mainnet").build()?;
+
+init(settings)?;
+
+// 1. Prepare login
+let address = SuiAddress::new("0x1234...")?;
+let (sis_message, nonce) = prepare_login(&address)?;
+
+// 2. User signs message with wallet (frontend)
+// let signature = wallet.sign(sis_message.to_human_readable());
+
+// 3. Verify and login
+let signature = SuiSignature::from_hex("0x00...")?;
+let login_details = login(
+    &signature,
+    &address,
+    session_key,
+    &mut signature_map,
+    &canister_id,
+    &nonce,
+)?;
+```
+
+### BCS Serialization
+
+```rust
+// Create message and serialize with BCS
+let message = SisMessage::new(&address, &nonce);
+
+// BCS serialization (recommended)
+let bcs_bytes = message.to_sign_bytes();
+
+// Validate BCS compatibility
+message.validate_bcs_serialization()?;
+
+// Compare with JSON (debugging)
+let (bcs, json) = message.compare_serializations();
+println!("BCS: {} bytes, JSON: {} bytes", bcs.len(), json.len());
+```
+
+## 📝 Updates
 
 See the [CHANGELOG](CHANGELOG.md) for details on updates.
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome. Please submit your pull requests or open issues to propose changes or report bugs.
+Contributions are welcome! Please feel free to submit pull requests or open issues to propose changes or report bugs.
 
-## License
+### Development
 
-This project is licensed under the MIT License. See the LICENSE file for more details.
+```bash
+cargo test
 
-[crate-image]: https://img.shields.io/badge/crate-ic__sis-blue
+cargo test -- --nocapture
+
+cargo fmt --check
+
+cargo clippy -- -D warnings
+```
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
+---
+
+## 🔗 Links
+
+- **Documentation**: [docs.rs/ic_sis](https://docs.rs/ic_sis)
+- **Repository**: [github.com/Talentum-id/ic_sis](https://github.com/Talentum-id/ic_sis)
+- **Crate**: [crates.io/crates/ic_sis](https://crates.io/crates/ic_sis)
+
+[crate-image]: https://img.shields.io/crates/v/ic_sis.svg
 [crate-link]: https://crates.io/crates/ic_sis
-[docs-image]: https://img.shields.io/badge/docs-latest-blue
+[docs-image]: https://docs.rs/ic_sis/badge.svg
 [docs-link]: https://docs.rs/ic_sis/

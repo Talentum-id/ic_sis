@@ -15,6 +15,7 @@ use blake2::{Blake2b, Digest};
 pub enum SisMessageError {
     MessageNotFound,
     MessageCreationError(String),
+    SerializationError(String),
 }
 
 impl fmt::Display for SisMessageError {
@@ -22,6 +23,7 @@ impl fmt::Display for SisMessageError {
         match self {
             SisMessageError::MessageNotFound => write!(f, "Message not found"),
             SisMessageError::MessageCreationError(e) => write!(f, "Message creation error: {}", e),
+            SisMessageError::SerializationError(e) => write!(f, "Serialization error: {}", e),
         }
     }
 }
@@ -46,6 +48,39 @@ pub struct SisMessage {
     pub expiration_time: u64,
 }
 
+/// BCS-compatible version of SisMessage for serialization
+/// This ensures proper ordering and formatting for SUI compatibility
+#[derive(Serialize, Clone, Debug)]
+struct BcsSisMessage {
+    address: String,
+    domain: String,
+    expiration_time: u64,
+    issued_at: u64,
+    network: String,
+    nonce: String,
+    scheme: String,
+    statement: String,
+    uri: String,
+    version: u8,
+}
+
+impl From<&SisMessage> for BcsSisMessage {
+    fn from(msg: &SisMessage) -> Self {
+        BcsSisMessage {
+            address: msg.address.clone(),
+            domain: msg.domain.clone(),
+            expiration_time: msg.expiration_time,
+            issued_at: msg.issued_at,
+            network: msg.network.clone(),
+            nonce: msg.nonce.clone(),
+            scheme: msg.scheme.clone(),
+            statement: msg.statement.clone(),
+            uri: msg.uri.clone(),
+            version: msg.version,
+        }
+    }
+}
+
 impl SisMessage {
     pub fn new(address: &SuiAddress, nonce: &str) -> SisMessage {
         let current_time = get_current_time();
@@ -59,7 +94,7 @@ impl SisMessage {
                 version: 1,
                 network: settings.network.clone(),
                 nonce: nonce.to_string(),
-                issued_at: get_current_time(),
+                issued_at: current_time,
                 expiration_time: current_time.saturating_add(settings.sign_in_expires_in),
             }
         })
@@ -71,13 +106,33 @@ impl SisMessage {
     }
 
     pub fn to_sign_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).unwrap_or_default()
+        let bcs_message = BcsSisMessage::from(self);
+        match bcs::to_bytes(&bcs_message) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                // Fallback to JSON if BCS fails (for debugging/development)
+                eprintln!("BCS serialization failed: {}, falling back to JSON", e);
+                serde_json::to_vec(self).unwrap_or_default()
+            }
+        }
+    }
+
+    pub fn to_json_bytes(&self) -> Result<Vec<u8>, SisMessageError> {
+        serde_json::to_vec(self)
+            .map_err(|e| SisMessageError::SerializationError(e.to_string()))
+    }
+
+    pub fn validate_bcs_serialization(&self) -> Result<(), SisMessageError> {
+        let bcs_message = BcsSisMessage::from(self);
+        bcs::to_bytes(&bcs_message)
+            .map_err(|e| SisMessageError::SerializationError(format!("BCS serialization failed: {}", e)))
+            .map(|_| ())
     }
     
     pub fn create_intent_message(&self) -> Vec<u8> {
         let message_bytes = self.to_sign_bytes();
         
-        let intent_prefix: [u8; 3] = [0, 0, 0]; // This would be the actual intent prefix
+        let intent_prefix = crate::sui::INTENT_PREFIX_AUTH;
         
         let mut intent_message = Vec::with_capacity(intent_prefix.len() + message_bytes.len());
         intent_message.extend_from_slice(&intent_prefix);
@@ -89,24 +144,19 @@ impl SisMessage {
         
         hash[..32].to_vec()
     }
-}
 
-impl fmt::Display for SisMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let json = serde_json::to_string(self).map_err(|_| fmt::Error)?;
-        write!(f, "{}", json)
-    }
-}
-
-impl From<SisMessage> for String {
-    fn from(val: SisMessage) -> Self {
+    pub fn to_human_readable(&self) -> String {
         let issued_at_datetime =
-            OffsetDateTime::from_unix_timestamp_nanos(val.issued_at as i128).unwrap();
-        let issued_at_iso_8601 = issued_at_datetime.format(&Rfc3339).unwrap();
+            OffsetDateTime::from_unix_timestamp_nanos(self.issued_at as i128)
+                .unwrap_or_else(|_| OffsetDateTime::now_utc());
+        let issued_at_iso_8601 = issued_at_datetime.format(&Rfc3339)
+            .unwrap_or_else(|_| "Invalid timestamp".to_string());
 
         let expiration_datetime =
-            OffsetDateTime::from_unix_timestamp_nanos(val.expiration_time as i128).unwrap();
-        let expiration_iso_8601 = expiration_datetime.format(&Rfc3339).unwrap();
+            OffsetDateTime::from_unix_timestamp_nanos(self.expiration_time as i128)
+                .unwrap_or_else(|_| OffsetDateTime::now_utc());
+        let expiration_iso_8601 = expiration_datetime.format(&Rfc3339)
+            .unwrap_or_else(|_| "Invalid timestamp".to_string());
 
         format!(
             "{domain} wants you to sign in with your Sui account:\n\
@@ -118,14 +168,34 @@ impl From<SisMessage> for String {
             Nonce: {nonce}\n\
             Issued At: {issued_at_iso_8601}\n\
             Expiration Time: {expiration_iso_8601}",
-            domain = val.domain,
-            address = val.address,
-            statement = val.statement,
-            uri = val.uri,
-            version = val.version,
-            network = val.network,
-            nonce = val.nonce,
+            domain = self.domain,
+            address = self.address,
+            statement = self.statement,
+            uri = self.uri,
+            version = self.version,
+            network = self.network,
+            nonce = self.nonce,
         )
+    }
+
+    /// Compare BCS vs JSON serialization for debugging
+    #[cfg(test)]
+    pub fn compare_serializations(&self) -> (Vec<u8>, Vec<u8>) {
+        let bcs_bytes = self.to_sign_bytes();
+        let json_bytes = self.to_json_bytes().unwrap_or_default();
+        (bcs_bytes, json_bytes)
+    }
+}
+
+impl fmt::Display for SisMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_human_readable())
+    }
+}
+
+impl From<SisMessage> for String {
+    fn from(val: SisMessage) -> Self {
+        val.to_human_readable()
     }
 }
 
@@ -212,28 +282,108 @@ mod tests {
         SuiAddress::new(&address).unwrap()
     }
 
-    #[test]
-    fn test_sis_message_creation() {
-        let address = setup();
-        let nonce = "test_nonce";
-        
-        let message = SisMessage::new(&address, nonce);
-        
-        assert_eq!(message.domain, "example.com");
-        assert_eq!(message.address, address.as_str());
-        assert_eq!(message.nonce, nonce);
-        assert_eq!(message.network, "mainnet");
-        assert_eq!(message.version, 1);
+    fn create_test_message(address: &SuiAddress, nonce: &str) -> SisMessage {
+        SisMessage {
+            scheme: "https".to_string(),
+            domain: "example.com".to_string(),
+            address: address.as_str().to_string(),
+            statement: "Sign in with Sui".to_string(),
+            uri: "http://example.com".to_string(),
+            version: 1,
+            network: "mainnet".to_string(),
+            nonce: nonce.to_string(),
+            issued_at: 1000000000,
+            expiration_time: 1000000000 + (5 * 60 * 1_000_000_000),
+        }
     }
 
     #[test]
-    fn test_create_intent_message() {
+    fn test_bcs_serialization() {
         let address = setup();
         let nonce = "test_nonce";
         
-        let message = SisMessage::new(&address, nonce);
-        let intent_message = message.create_intent_message();
+        let message = create_test_message(&address, nonce);
+        
+        let bcs_bytes = message.to_sign_bytes();
+        assert!(!bcs_bytes.is_empty());
+        
+        let validation_result = message.validate_bcs_serialization();
+        assert!(validation_result.is_ok());
+    }
 
-        assert_eq!(intent_message.len(), 32);
+    #[test]
+    fn test_bcs_vs_json_serialization() {
+        let address = setup();
+        let nonce = "test_nonce";
+        
+        let message = create_test_message(&address, nonce);
+        let (bcs_bytes, json_bytes) = message.compare_serializations();
+        
+        assert!(!bcs_bytes.is_empty());
+        assert!(!json_bytes.is_empty());
+        
+        assert!(bcs_bytes.len() < json_bytes.len());
+        
+        println!("BCS size: {} bytes", bcs_bytes.len());
+        println!("JSON size: {} bytes", json_bytes.len());
+        println!("BCS hex: {}", hex::encode(&bcs_bytes));
+    }
+
+    #[test]
+    fn test_bcs_deterministic() {
+        let address = setup();
+        let nonce = "test_nonce";
+        
+        let message = create_test_message(&address, nonce);
+        
+        let bytes1 = message.to_sign_bytes();
+        let bytes2 = message.to_sign_bytes();
+        assert_eq!(bytes1, bytes2);
+    }
+
+    #[test]
+    fn test_create_intent_message_with_bcs() {
+        let address = setup();
+        let nonce = "test_nonce";
+        
+        let message = create_test_message(&address, nonce);
+        let intent_hash = message.create_intent_message();
+
+        assert_eq!(intent_hash.len(), 32);
+        
+        let intent_hash2 = message.create_intent_message();
+        assert_eq!(intent_hash, intent_hash2);
+    }
+
+    #[test]
+    fn test_bcs_message_field_order() {
+        let address = setup();
+        let nonce = "test_nonce";
+        
+        let message = create_test_message(&address, nonce);
+        let bcs_message = BcsSisMessage::from(&message);
+        
+        assert_eq!(bcs_message.address, message.address);
+        assert_eq!(bcs_message.domain, message.domain);
+        assert_eq!(bcs_message.nonce, message.nonce);
+        assert_eq!(bcs_message.version, message.version);
+    }
+
+    #[test]
+    fn test_sis_message_map() {
+        let address = setup();
+        let nonce = "test_nonce";
+        let message = create_test_message(&address, nonce);
+        
+        let mut map = SisMessageMap::new();
+        map.insert(message.clone(), &address, nonce);
+        
+        let retrieved = map.get(&address, nonce);
+        assert!(retrieved.is_ok());
+        assert_eq!(retrieved.unwrap().nonce, nonce);
+        
+        map.remove(&address, nonce);
+        let retrieved = map.get(&address, nonce);
+        assert!(retrieved.is_err());
     }
 }

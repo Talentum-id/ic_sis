@@ -78,7 +78,7 @@ impl fmt::Display for LoginError {
         match self {
             LoginError::SuiError(e) => write!(f, "{}", e),
             LoginError::SisMessageError(e) => write!(f, "{}", e),
-            LoginError::AddressMismatch => write!(f, "Recovered address does not match"),
+            LoginError::AddressMismatch => write!(f, "Recovered address does not match provided address"),
             LoginError::DelegationError(e) => write!(f, "{}", e),
             LoginError::ASN1EncodeErr(e) => write!(f, "{}", e),
             LoginError::SignatureVerificationFailed => write!(f, "Signature verification failed"),
@@ -97,17 +97,20 @@ pub fn login(
 ) -> Result<LoginDetails, LoginError> {
     SIS_MESSAGES.with_borrow_mut(|sis_messages| {
         sis_messages.prune_expired();
+        
         let message = sis_messages.get(address, nonce)?;
         
-        let message_bytes = message.to_sign_bytes();
+        let intent_hash = message.create_intent_message();
 
-        match verify_sui_signature(&message_bytes, signature) {
+        match verify_sui_signature(&intent_hash, signature) {
             Ok(derived_address) => {
                 if derived_address != address.as_str() {
                     return Err(LoginError::AddressMismatch);
                 }
             },
-            Err(e) => return Err(LoginError::SuiError(e)),
+            Err(e) => {
+                return Err(LoginError::SuiError(e));
+            }
         }
 
         sis_messages.remove(address, nonce);
@@ -182,5 +185,15 @@ mod tests {
         let (message, nonce) = result.unwrap();
         assert_eq!(message.address, address.as_str());
         assert!(!nonce.is_empty());
+        assert_eq!(nonce.len(), 20); // 10 bytes * 2 hex chars per byte
+    }
+
+    #[test]
+    fn test_login_error_display() {
+        let error = LoginError::AddressMismatch;
+        assert_eq!(error.to_string(), "Recovered address does not match provided address");
+        
+        let error = LoginError::SignatureVerificationFailed;
+        assert_eq!(error.to_string(), "Signature verification failed");
     }
 }
