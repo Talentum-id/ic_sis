@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (2025-06-19)
+
+### 🔧 Improvements
+- **Fixed sis_prepare_login**: Updated sis_message to be hex encoded
+
 ## 0.2.0 (2025-06-05)
 
 ### 🚀 Major Features Added
