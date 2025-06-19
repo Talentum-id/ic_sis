@@ -130,8 +130,7 @@ impl SisMessage {
     }
     
     pub fn create_intent_message(&self) -> Vec<u8> {
-        let message_bytes = self.to_sign_bytes();
-        
+        let message_bytes = self.to_human_readable().into_bytes();
         let intent_prefix = crate::sui::INTENT_PREFIX_AUTH;
         
         let mut intent_message = Vec::with_capacity(intent_prefix.len() + message_bytes.len());

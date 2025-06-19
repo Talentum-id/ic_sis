@@ -1192,6 +1192,36 @@ dependencies = [
 [[package]]
 name = "ic_sis"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "094031942989925588e6f3157b67b504f5ee0b34c95e2bc0a78e710b7bc31ec5"
+dependencies = [
+ "base64 0.13.1",
+ "bcs",
+ "blake2",
+ "candid",
+ "ed25519-dalek",
+ "getrandom 0.2.16",
+ "hex",
+ "ic-cdk 0.15.2",
+ "ic-cdk-timers",
+ "ic-certified-map",
+ "k256",
+ "p256",
+ "rand_chacha 0.3.1",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "serde_json",
+ "sha2 0.9.9",
+ "simple_asn1",
+ "time",
+ "tiny-keccak",
+ "url",
+]
+
+[[package]]
+name = "ic_sis"
+version = "0.2.1"
 dependencies = [
  "base64 0.13.1",
  "bcs",
@@ -1221,38 +1251,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic_sis"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "094031942989925588e6f3157b67b504f5ee0b34c95e2bc0a78e710b7bc31ec5"
-dependencies = [
- "base64 0.13.1",
- "bcs",
- "blake2",
- "candid",
- "ed25519-dalek",
- "getrandom 0.2.16",
- "hex",
- "ic-cdk 0.15.2",
- "ic-cdk-timers",
- "ic-certified-map",
- "k256",
- "p256",
- "rand_chacha 0.3.1",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_json",
- "sha2 0.9.9",
- "simple_asn1",
- "time",
- "tiny-keccak",
- "url",
-]
-
-[[package]]
 name = "ic_sis_provider"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "candid",
  "hex",
@@ -1261,7 +1261,7 @@ dependencies = [
  "ic-cdk-macros 0.18.4",
  "ic-certified-map",
  "ic-stable-structures",
- "ic_sis 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic_sis 0.2.0",
  "pocket-ic",
  "rand 0.8.5",
  "ring",
