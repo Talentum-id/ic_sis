@@ -1,6 +1,6 @@
 [package]
 name = "ic_sis_provider"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Using the pre built ic_sis_provider canister is the easiest way to integrate Sui wallet authentication into an Internet Computer (ICP) application."
 license = "MIT"

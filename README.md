@@ -46,13 +46,13 @@ The below diagram illustrates the high-level login flow when using the `ic_sis_p
 
 `ic-sis` consists of two main packages: the Rust support library and the prebuilt identity provider canister. The project also includes demo applications and a JS/TS/React support library for easy frontend integration.
 
-### [ic_sis](https://github.com/Talentum-id/ic_sis/tree/main/packages/ic_sis)
+### [ic_sis](https://github.com/Talentum-id/ic_sis/tree/master/packages/ic_sis)
 
 Rust library that provides the necessary tools for integrating Sign-In with Sui (SIS) into ICP canisters, allowing users to sign in using their Sui wallets.
 
-### [ic-sis-provider](https://github.com/Talentum-id/ic_sis/tree/main/packages/ic_sis_provider)
+### [ic-sis-provider](https://github.com/Talentum-id/ic_sis/tree/master/packages/ic_sis_provider)
 
-Prebuilt canister serving as a SIS identity provider for Internet Computer canisters. `ic_sis_provider` packages the [ic_sis](https://github.com/Talentum-id/ic_sis/tree/main/packages/ic_sis) library and makes it available as a canister that can easily be integrated into any Internet Computer application, independent of the application's programming language.
+Prebuilt canister serving as a SIS identity provider for Internet Computer canisters. `ic_sis_provider` packages the [ic_sis](https://github.com/Talentum-id/ic_sis/tree/master/packages/ic_sis) library and makes it available as a canister that can easily be integrated into any Internet Computer application, independent of the application's programming language.
 
 ## Installation
 
