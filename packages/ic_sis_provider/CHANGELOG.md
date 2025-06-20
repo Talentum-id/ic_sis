@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 (2025-06-20)
+
+### 🔧 Improvements
+- **Fixed sis_prepare_login**: Updated sis_message to human readable
+
 ## 0.2.1 (2025-06-19)
 
 ### 🔧 Improvements

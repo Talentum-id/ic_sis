@@ -15,7 +15,7 @@ fn sis_prepare_login(address: String) -> Result<PrepareLoginOkResponse, String> 
     match ic_sis::login::prepare_login(&address) {
         Ok((message, nonce)) => {
             Ok(PrepareLoginOkResponse {
-                sis_message: hex::encode(message.to_sign_bytes()),
+                sis_message: message.to_human_readable(),
                 nonce,
             })
         }

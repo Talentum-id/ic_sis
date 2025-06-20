@@ -2,6 +2,11 @@
 
 All notable changes to the `ic_sis` library will be documented in this file.
 
+## 0.2.2 (2025-06-20)
+### 🔧 Improvements
+- **Intent Message**: Modified `create_intent_message` to human readable
+- **ic_sis library**: Update the version of `ic_sis` library
+
 ## 0.2.1 (2025-06-20)
 ### 🔧 Improvements
 - **Intent Message**: Modified `create_intent_message` to handle non-bsc serialized message
